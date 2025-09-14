@@ -14,7 +14,7 @@ bl_info = {
     "name": "Blender B3D",
     "description": "Exporter for Blitz3D B3D Models",
     "author": "Yacker",
-    "version": (0, 1, 0),
+    "version": (0, 2, 0),
     "blender": (4, 5, 2),
     "location": "File > Import-Export > B3D Model (.b3d) ",
     "warning": "",
@@ -47,18 +47,23 @@ def WriteString(f, v):
         WriteUInt8(f,ord(c))
     WriteUInt8(f,0)
     
-class ExportB3D(bpy.types.Operator, ImportHelper):
+class ExportB3D(bpy.types.Operator, ExportHelper):
     """Export a B3D Model"""
     bl_idname = "export.b3d_model"
     bl_label = "Export B3D"
     bl_options = {'REGISTER', 'UNDO'}
-    filename_ext = "*"
+    filename_ext = ".b3d"
     filter_glob: StringProperty(
         default="*.b3d",
-        options={'HIDDEN'},
-        maxlen=255)
+        options={'HIDDEN'})
+    
+    convert_coords: BoolProperty(
+        name="Convert blender coords to Blitz3D coords",
+        description="Blender uses Z up, and Blitz3D uses Y up. Tick this to automatically convert between these coordinate systems.",
+        default=True,
+    )
     def execute(self, context):
-        return b3d_export(self.filepath)
+        return b3d_export(self.filepath,self.convert_coords)
 
 class TEXSBlock():
     def __init__(self):
@@ -101,6 +106,14 @@ class NODEBlock():
         self.subNodes = []
         self.keyNodes = []
         self.animNodes = []
+        
+        # here to keep things easy for me
+        self.boneInd = -1
+
+class BONEBlock():
+    def __init__(self):
+        self.vert = 0
+        self.weight = 0
 
 class VERTBlock():
     def __init__(self):
@@ -265,11 +278,19 @@ def CreateBrus(obj,texs):
         BrusBlock.append(currBrus)
     return BrusBlock
 
-def CreateMesh(obj):
+def ConvertBoneList(nodes,vertGroups,workList):
+    for bone in nodes:
+        for v in vertGroups:
+            if bone.name == v.name:
+                workList[v.index] = bone
+        ConvertBoneList(bone.subNodes,vertGroups,workList)
+
+def CreateMesh(obj,boneNodes,vertexGroups,conv_coords):
     mesh = MESHBlock()
     mesh.vertBlock.tex_coord_count = len(obj.uv_layers)
     colors = None
     colorsAsFloat = True
+    currVertCount = 0
     if len(obj.color_attributes) > 0:
         colors = obj.color_attributes[0]
         if (colors.data_type != "FLOAT_COLOR"):
@@ -290,6 +311,13 @@ def CreateMesh(obj):
                     newCol.append(col[(obj.loops[loop_ind].vertex_index*4)+3])
             col = newCol
         colors = col
+    
+    # convert vertex weight inds to weight inds as they're going to be written on export
+    bone_conv_list = {}
+    ConvertBoneList(boneNodes,vertexGroups,bone_conv_list)
+    if (len(bone_conv_list) == 0):
+        bone_conv_list = None
+    
     for matId in range(0,len(obj.materials)):
         triBlock = TRISBlock()
         unoptimizedTris = []
@@ -306,6 +334,11 @@ def CreateMesh(obj):
                     newVert.nx = loop.normal.x
                     newVert.ny = loop.normal.y
                     newVert.nz = loop.normal.z
+                    if (conv_coords):
+                        newVert.y = obj.vertices[loop.vertex_index].undeformed_co.z
+                        newVert.z = -obj.vertices[loop.vertex_index].undeformed_co.y
+                        newVert.ny = loop.normal.z
+                        newVert.nz = -loop.normal.y
                     if colors != None:
                         newVert.r = colors[loop_ind*4]
                         newVert.g = colors[(loop_ind*4)+1]
@@ -316,6 +349,11 @@ def CreateMesh(obj):
                             newVert.g /= 255
                             newVert.b /= 255
                             newVert.a /= 255
+                    if (bone_conv_list != None):
+                        for g in obj.vertices[loop.vertex_index].groups:
+                            if (bone_conv_list[g.group] != None):
+                                newVert.weightInds.append(g.group)
+                                newVert.weights.append(g.weight)
                     for uv_layer in obj.uv_layers:
                         uv = uv_layer.uv[loop_ind].vector
                         newVert.u.append(uv.x)
@@ -339,12 +377,14 @@ def CreateMesh(obj):
                                     validVert = False
                                     break
                             if validVert == False:
+                                j+=1
                                 continue
                             for x in range(0,len(currVert.weightInds)):
                                 if currVert.weightInds[x] != checkVert.weightInds[x] or currVert.weights[x] != checkVert.weights[x]:
                                     validVert = False
                                     break
                             if validVert == False:
+                                j+=1
                                 continue
                             # identical vertex located, remove it
                             unoptimizedVerts.pop(j)
@@ -357,20 +397,60 @@ def CreateMesh(obj):
                 j += 1
             i += 1
         
+        for i in range(0,len(unoptimizedTris)):
+            unoptimizedTris[i] += currVertCount
+        
+        currVertCount += len(unoptimizedVerts)
+        
         triBlock.tris = unoptimizedTris
         mesh.vertBlock.verts += unoptimizedVerts
         mesh.triBlocks.append(triBlock)
+    # add vertices to bones
+    if (bone_conv_list != None):
+        for vind in range(0,len(mesh.vertBlock.verts)):
+            vert = mesh.vertBlock.verts[vind]
+            for i in range(0,len(vert.weightInds)):
+                newWeight = BONEBlock()
+                newWeight.vert = vind
+                newWeight.weight = vert.weights[i]
+                bone_conv_list[vert.weightInds[i]].bone.append(newWeight)
     if colors != None:
         mesh.vertBlock.flags |= 2
     return mesh
 
-def CreateNode(obj,parent):
+def CreateBone(bone,ind,conv_coords):
+    retNode = NODEBlock()
+    retNode.bone = []
+    retNode.name = bone.name
+    retNode.posX = bone.head.x
+    retNode.posY = bone.head.y
+    retNode.posZ = bone.head.z
+    if (conv_coords):
+        retNode.posY = bone.head.z
+        retNode.posZ = -bone.head.y
+    boneQuat = bone.matrix.to_quaternion()
+    if (conv_coords):
+        rotateQuat = mathutils.Euler((math.radians(-90),0,0), 'XYZ').to_quaternion()
+        boneQuat = rotateQuat @ boneQuat
+    retNode.rotW = boneQuat.w
+    retNode.rotX = boneQuat.x
+    retNode.rotY = boneQuat.y
+    retNode.rotZ = boneQuat.z
+    retNode.boneInd = ind
+    ind += 1
+    for childBone in bone.children:
+        newBone,ind = CreateBone(childBone,ind,False) # don't recursively convert the coordinates! it'll curl up! only the bones without parents need conversion!
+        retNode.subNodes.append(newBone)
+    # TODO: animations
+    return retNode,ind
+
+def CreateNode(obj,parent,conv_coords):
     retNode = NODEBlock()
     retNode.name = obj.name
     if obj.type == 'MESH':
         for mod in obj.modifiers:
             if mod.type == 'ARMATURE' and mod.object != None and parent == None: # sorry, we only support one skeleton
-                retNode.subNodes.append(CreateNode(mod.object,obj))
+                CreateNode(mod.object,retNode)
         newmesh = obj.data.copy()
         bm = bmesh.new()
         bm.from_mesh(obj.data)
@@ -378,11 +458,14 @@ def CreateNode(obj,parent):
         bm.to_mesh(newmesh)
         bm.free()
         
-        retNode.mesh = CreateMesh(newmesh)
+        retNode.mesh = CreateMesh(newmesh,retNode.subNodes,obj.vertex_groups,conv_coords)
         
         retNode.posX = obj.location.x
         retNode.posY = obj.location.y
         retNode.posZ = obj.location.z
+        if (conv_coords):
+            retNode.posY = obj.location.z
+            retNode.posZ = -obj.location.y
         retNode.scaleX = obj.scale.x
         retNode.scaleY = obj.scale.y
         retNode.scaleZ = obj.scale.z
@@ -390,6 +473,12 @@ def CreateNode(obj,parent):
         retNode.rotX = obj.rotation_quaternion.x
         retNode.rotY = obj.rotation_quaternion.y
         retNode.rotZ = obj.rotation_quaternion.z
+    if obj.type == 'ARMATURE':
+        boneInd = 0
+        for bone in obj.data.bones:
+            if bone.parent == None:
+                newBone,boneInd = CreateBone(bone,boneInd,False) # coordinate conversion shouldn't be necessary on bones? as they're relative to the parent mesh?
+                parent.subNodes.append(newBone)
     
     """for ob in obj.children:
         if ob != parent and (ob.type == 'MESH' or ob.type == 'ARMATURE'):
@@ -433,6 +522,9 @@ def GetMeshSize(mesh):
     
     return meshSize
 
+def GetBoneSize(bone):
+    return 8 * len(bone)
+
 def GetNodeSize(node):
     nodeSize = len(node.name)+1
     nodeSize += 0x28
@@ -441,6 +533,8 @@ def GetNodeSize(node):
     
     if node.mesh != None:
         nodeSize += 8 + GetMeshSize(node.mesh)
+    if (node.bone != None):
+        nodeSize += 8 + GetBoneSize(node.bone)
     
     return nodeSize
 
@@ -472,8 +566,18 @@ def WriteBrus(f, brus):
         WriteFloat(f,bru.r)
         WriteFloat(f,bru.g)
         WriteFloat(f,bru.b)
-        WriteFloat(f,bru.a)
-        WriteFloat(f,bru.shiny)
+        alpha = bru.a
+        if alpha > 1:
+            alpha = 1
+        if alpha < 0:
+            alpha = 0
+        WriteFloat(f,alpha)
+        shiny = bru.shiny
+        if shiny > 1:
+            shiny = 1
+        if shiny < 0:
+            shiny = 0
+        WriteFloat(f,shiny)
         WriteUInt32(f,bru.blend)
         WriteUInt32(f,bru.fx)
         i = 0
@@ -508,7 +612,7 @@ def WriteVerts(f,verts):
             WriteFloat(f,v.a)
         for i in range(0,verts.tex_coord_count):
             WriteFloat(f,v.u[i])
-            WriteFloat(f,v.v[i])
+            WriteFloat(f,1-v.v[i])
 
 def WriteTris(f,tris):
     WriteUInt8(f,0x54)
@@ -531,6 +635,16 @@ def WriteMesh(f,mesh):
     for x in mesh.triBlocks:
         WriteTris(f,x)
 
+def WriteBone(f,bone):
+    WriteUInt8(f,0x42)
+    WriteUInt8(f,0x4F)
+    WriteUInt8(f,0x4E)
+    WriteUInt8(f,0x45)
+    WriteUInt32(f,GetBoneSize(bone))
+    for i in range(0,len(bone)):
+        WriteUInt32(f,bone[i].vert)
+        WriteFloat(f,bone[i].weight)
+
 def WriteNode(f,node):
     WriteUInt8(f,0x4E)
     WriteUInt8(f,0x4F)
@@ -550,6 +664,11 @@ def WriteNode(f,node):
     WriteFloat(f,node.rotZ)
     if node.mesh != None:
         WriteMesh(f,node.mesh)
+    if node.bone != None:
+        WriteBone(f,node.bone)
+    
+    for subNode in node.subNodes:
+        WriteNode(f,subNode)
 
 def WriteFile(texs,brus,node,filepath):
     f = open(filepath,'wb')
@@ -576,7 +695,7 @@ def WriteFile(texs,brus,node,filepath):
     
     f.close()
 
-def b3d_export(filepath):
+def b3d_export(filepath,conv_coords):
     # need current object...
     curr_obj = bpy.context.active_object
     if (curr_obj == None):
@@ -588,7 +707,7 @@ def b3d_export(filepath):
     
     texs = CreateTexs(curr_obj)
     brus = CreateBrus(curr_obj,texs)
-    node = CreateNode(curr_obj,None)
+    node = CreateNode(curr_obj,None,conv_coords)
     
     WriteFile(texs,brus,node,filepath)
     
@@ -782,7 +901,7 @@ class MakeGroups:
 
         var = tree.interface.new_socket(name='Alpha',  in_out='INPUT', socket_type='NodeSocketBool')
         var.hide_value = False
-        var.default_value = True
+        var.default_value = False
 
         var = tree.interface.new_socket(name='AlphaMask',  in_out='INPUT', socket_type='NodeSocketBool')
         var.hide_value = False
@@ -882,6 +1001,8 @@ class MakeGroups:
         var.default_value = (0.0, 0.0, 0.0, 1.0)
 
         var = tree.interface.new_socket(name='Specular',  in_out='INPUT', socket_type='NodeSocketFloat')
+        var.min_value = 0
+        var.max_value = 1.0
         var.hide_value = False
         var.default_value = 0.0
 
@@ -890,8 +1011,8 @@ class MakeGroups:
         var.default_value = (1.0, 1.0, 1.0, 1.0)
 
         var = tree.interface.new_socket(name='Alpha',  in_out='INPUT', socket_type='NodeSocketFloat')
-        var.min_value = -3.4028234663852886e+38
-        var.max_value = 3.4028234663852886e+38
+        var.min_value = 0
+        var.max_value = 1.0
         var.hide_value = False
         var.default_value = 1.0
 
