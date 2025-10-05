@@ -156,6 +156,16 @@ class MESHBlock():
         self.vertBlock = VERTBlock()
         self.triBlocks = []
 
+def GetFileFromDir(name):
+    lastSlash1 = name.rfind("/")
+    lastSlash2 = name.rfind("\\")
+    if lastSlash2 > lastSlash1:
+        lastSlash1 = lastSlash2
+    if lastSlash1 == -1:
+        return name
+    else:
+        return name[lastSlash1+1:]
+
 def CreateTexs(obj):
     TexsBlock = []#TEXSBlock()
     for mat in obj.data.materials:
@@ -186,6 +196,8 @@ def CreateTexs(obj):
                 B3DTex = TEXSBlock()
                 B3DTex.blenderTex = blenderImage
                 B3DTex.path = os.path.basename(blenderImage.image.filepath)
+                # os.path.basename gives errors for how blender stores files relatively. make our own...
+                B3DTex.path = GetFileFromDir(blenderImage.image.filepath)
                 B3DTex.blend = int(node.blend_type)
                 
                 if node.inputs[1].default_value == True:
@@ -223,7 +235,7 @@ def CreateTexs(obj):
                 if node.bl_idname == "ShaderNodeTexImage" and node.image != None:
                     B3DTex = TEXSBlock()
                     B3DTex.blenderTex = node
-                    B3DTex.path = os.path.basename(node.image.filepath)
+                    B3DTex.path = GetFileFromDir(node.image.filepath)
                     B3DTex.flags |= 1 | 8 # color + mipmap
                     
                     TexsBlock.append(B3DTex)
@@ -234,10 +246,10 @@ def CreateBrus(obj,texs):
     BrusBlock = []
     for mat in obj.data.materials:
         currBrus = BRUSBlock()
-        currBrus.mat_name = mat.name
         if mat == None:
             BrusBlock.append(currBrus)
             continue
+        currBrus.mat_name = mat.name
         """tex = mat.node_tree.nodes.get("Image Texture")
         if tex:
             for i in range(0,len(texs)):
