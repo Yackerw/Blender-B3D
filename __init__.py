@@ -62,8 +62,13 @@ class ExportB3D(bpy.types.Operator, ExportHelper):
         description="Blender uses Z up, and Blitz3D uses Y up. Tick this to automatically convert between these coordinate systems.",
         default=True,
     )
+    export_as_one: BoolProperty(
+        name="Export all selected as one file",
+        description="Turning this on will disable exporting object transform info",
+        default=True,
+    )
     def execute(self, context):
-        return b3d_export(self.filepath,self.convert_coords)
+        return b3d_export(self.filepath,self.convert_coords,self.export_as_one)
 
 class TEXSBlock():
     def __init__(self):
@@ -156,54 +161,70 @@ def CreateTexs(obj):
     for mat in obj.data.materials:
         from_socket_to_socket = dict([[link.from_socket, link.to_socket] for link in mat.node_tree.links])
         to_socket_from_socket = dict([[link.to_socket, link.from_socket] for link in mat.node_tree.links])
+        
+        simple_mats = True
         for node in mat.node_tree.nodes:
-            if node.bl_idname != "B3DTextureInput":
-                continue
-            
-            blenderImage = to_socket_from_socket.get(node.inputs[0], None)
-            if blenderImage == None:
-                continue
-            blenderImage = blenderImage.node
-            if (blenderImage.image == None):
-                continue
-            if blenderImage.image.filepath == "":
-                continue
-            
-            B3DTex = TEXSBlock()
-            B3DTex.blenderTex = blenderImage
-            B3DTex.path = blenderImage.image.filepath
-            B3DTex.blend = int(node.blend_type)
-            
-            if node.inputs[1].default_value == True:
-                B3DTex.flags |= 1
-            if node.inputs[2].default_value == True:
-                B3DTex.flags |= 2
-            if node.inputs[3].default_value == True:
-                B3DTex.flags |= 4
-            if node.inputs[4].default_value == True:
-                B3DTex.flags |= 8
-            if node.inputs[5].default_value == True:
-                B3DTex.flags |= 0x10000
-            if node.inputs[6].default_value == True:
-                B3DTex.flags |= 0x400
-                B3DTex.flags |= 0x800
-            
-            if node.u_type == '0':
-                B3DTex.flags |= 0x10
-            if node.u_type == '2':
-                B3DTex.flags |= 0x2000
-            
-            if node.v_type == '0':
-                B3DTex.flags |= 0x20
-            if node.v_type == '2':
-                B3DTex.flags |= 0x4000
-            
-            if node.mapType == '1':
-                B3DTex.flags |= 0x40
-            if node.mapType == '2':
-                B3DTex.flags |= 0x80
-            
-            TexsBlock.append(B3DTex)
+            if node.bl_idname == "B3DShader":
+                simple_mats = False
+        
+        if simple_mats == False:
+            for node in mat.node_tree.nodes:
+                if node.bl_idname != "B3DTextureInput":
+                    continue
+                
+                blenderImage = to_socket_from_socket.get(node.inputs[0], None)
+                if blenderImage == None:
+                    continue
+                blenderImage = blenderImage.node
+                if (blenderImage.image == None):
+                    continue
+                if blenderImage.image.filepath == "":
+                    continue
+                
+                B3DTex = TEXSBlock()
+                B3DTex.blenderTex = blenderImage
+                B3DTex.path = os.path.basename(blenderImage.image.filepath)
+                B3DTex.blend = int(node.blend_type)
+                
+                if node.inputs[1].default_value == True:
+                    B3DTex.flags |= 1
+                if node.inputs[2].default_value == True:
+                    B3DTex.flags |= 2
+                if node.inputs[3].default_value == True:
+                    B3DTex.flags |= 4
+                if node.inputs[4].default_value == True:
+                    B3DTex.flags |= 8
+                if node.inputs[5].default_value == True:
+                    B3DTex.flags |= 0x10000
+                if node.inputs[6].default_value == True:
+                    B3DTex.flags |= 0x400
+                    B3DTex.flags |= 0x800
+                
+                if node.u_type == '0':
+                    B3DTex.flags |= 0x10
+                if node.u_type == '2':
+                    B3DTex.flags |= 0x2000
+                
+                if node.v_type == '0':
+                    B3DTex.flags |= 0x20
+                if node.v_type == '2':
+                    B3DTex.flags |= 0x4000
+                
+                if node.mapType == '1':
+                    B3DTex.flags |= 0x40
+                if node.mapType == '2':
+                    B3DTex.flags |= 0x80
+                
+                TexsBlock.append(B3DTex)
+        else:
+            for node in mat.node_tree.nodes:
+                if node.bl_idname == "ShaderNodeTexImage" and node.image != None:
+                    B3DTex = TEXSBlock()
+                    B3DTex.blenderTex = node
+                    B3DTex.path = os.path.basename(node.image.filepath)
+                    B3DTex.flags |= 1 | 8 # color + mipmap
+                    
+                    TexsBlock.append(B3DTex)
                 
     return TexsBlock
 
@@ -274,7 +295,15 @@ def CreateBrus(obj,texs):
             if vertAlphaNode != None and vertAlphaNode.node.bl_idname == "ShaderNodeVertexColor":
                 currBrus.fx |= 0x20
         else:
-            raise Exception("Material doesn't have B3D Shader node!")
+            # connect to the first texture found i guess
+            for node in mat.node_tree.nodes:
+                if node.bl_idname == "ShaderNodeTexImage":
+                    for i in range(0,len(texs)):
+                        if texs[i].blenderTex == node:
+                            currBrus.textures.append(i)
+                            break
+                    break
+            #raise Exception("Material doesn't have B3D Shader node!")
         BrusBlock.append(currBrus)
     return BrusBlock
 
@@ -339,6 +368,10 @@ def CreateMesh(obj,boneNodes,vertexGroups,conv_coords):
                         newVert.z = -obj.vertices[loop.vertex_index].undeformed_co.y
                         newVert.ny = loop.normal.z
                         newVert.nz = -loop.normal.y
+                    mag = math.sqrt((newVert.nx*newVert.nx)+(newVert.ny*newVert.ny)+(newVert.nz*newVert.nz))
+                    newVert.nx /= mag
+                    newVert.ny /= mag
+                    newVert.nz /= mag
                     if colors != None:
                         newVert.r = colors[loop_ind*4]
                         newVert.g = colors[(loop_ind*4)+1]
@@ -451,7 +484,7 @@ def CreateNode(obj,parent,conv_coords):
         for mod in obj.modifiers:
             if mod.type == 'ARMATURE' and mod.object != None and parent == None: # sorry, we only support one skeleton
                 CreateNode(mod.object,retNode)
-        newmesh = obj.data.copy()
+        newmesh = obj.to_mesh(preserve_all_data_layers=True,depsgraph=bpy.context.evaluated_depsgraph_get())#obj.data.copy()
         bm = bmesh.new()
         bm.from_mesh(obj.data)
         bmesh.ops.triangulate(bm, faces=bm.faces[:])
@@ -469,10 +502,11 @@ def CreateNode(obj,parent,conv_coords):
         retNode.scaleX = obj.scale.x
         retNode.scaleY = obj.scale.y
         retNode.scaleZ = obj.scale.z
-        retNode.rotW = obj.rotation_quaternion.w
-        retNode.rotX = obj.rotation_quaternion.x
-        retNode.rotY = obj.rotation_quaternion.y
-        retNode.rotZ = obj.rotation_quaternion.z
+        rotQuat = obj.rotation_euler.to_quaternion()
+        retNode.rotW = rotQuat.w
+        retNode.rotX = rotQuat.x
+        retNode.rotY = rotQuat.y
+        retNode.rotZ = rotQuat.z
     if obj.type == 'ARMATURE':
         boneInd = 0
         for bone in obj.data.bones:
@@ -695,9 +729,32 @@ def WriteFile(texs,brus,node,filepath):
     
     f.close()
 
-def b3d_export(filepath,conv_coords):
+def b3d_export(filepath,conv_coords,combine_all):
     # need current object...
     curr_obj = bpy.context.active_object
+    if (combine_all):
+        curr_mesh = bpy.data.meshes.new("mesh")
+        curr_obj = bpy.data.objects.new("TempMesh", curr_mesh)
+        bpy.context.collection.objects.link(curr_obj)
+        new_objs = []
+        for ob in bpy.context.selected_objects:
+            if (ob.type == 'MESH'):
+                new_mesh = ob.data.copy()
+                new_obj = ob.copy()
+                new_obj.data = new_mesh
+                bpy.context.collection.objects.link(new_obj)
+                new_objs.append(new_obj)
+            ob.select_set(False)
+        for ob in new_objs:
+            # iterate again to apply modifiers
+            bpy.context.view_layer.objects.active = ob
+            ob.select_set(True)
+            bpy.ops.object.make_single_user(object=True,obdata=True,material=True,animation=False,obdata_animation=False)
+            for modifier in ob.modifiers:
+                bpy.ops.object.modifier_apply(modifier=modifier.name)
+        curr_obj.select_set(True)
+        bpy.context.view_layer.objects.active = curr_obj
+        bpy.ops.object.join()
     if (curr_obj == None):
         return {'CANCELLED'}
     if (curr_obj.type != 'MESH'):
@@ -710,6 +767,9 @@ def b3d_export(filepath,conv_coords):
     node = CreateNode(curr_obj,None,conv_coords)
     
     WriteFile(texs,brus,node,filepath)
+    
+    if (combine_all):
+        bpy.ops.object.delete()
     
     return {"FINISHED"}
 
