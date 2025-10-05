@@ -160,7 +160,7 @@ def CreateTexs(obj):
     TexsBlock = []#TEXSBlock()
     for mat in obj.data.materials:
         if (mat == None):
-            return TexsBlock
+            continue
         from_socket_to_socket = dict([[link.from_socket, link.to_socket] for link in mat.node_tree.links])
         to_socket_from_socket = dict([[link.to_socket, link.from_socket] for link in mat.node_tree.links])
         
@@ -237,7 +237,7 @@ def CreateBrus(obj,texs):
         currBrus.mat_name = mat.name
         if mat == None:
             BrusBlock.append(currBrus)
-            return BrusBlock
+            continue
         """tex = mat.node_tree.nodes.get("Image Texture")
         if tex:
             for i in range(0,len(texs)):
