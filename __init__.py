@@ -159,6 +159,8 @@ class MESHBlock():
 def CreateTexs(obj):
     TexsBlock = []#TEXSBlock()
     for mat in obj.data.materials:
+        if (mat == None):
+            return TexsBlock
         from_socket_to_socket = dict([[link.from_socket, link.to_socket] for link in mat.node_tree.links])
         to_socket_from_socket = dict([[link.to_socket, link.from_socket] for link in mat.node_tree.links])
         
@@ -233,6 +235,9 @@ def CreateBrus(obj,texs):
     for mat in obj.data.materials:
         currBrus = BRUSBlock()
         currBrus.mat_name = mat.name
+        if mat == None:
+            BrusBlock.append(currBrus)
+            return BrusBlock
         """tex = mat.node_tree.nodes.get("Image Texture")
         if tex:
             for i in range(0,len(texs)):
@@ -250,7 +255,7 @@ def CreateBrus(obj,texs):
             to_socket_from_socket = dict([[link.to_socket, link.from_socket] for link in mat.node_tree.links])
             texNodes = []
             firstTex = to_socket_from_socket.get(shaderNode.inputs[0],None)
-            if (firstTex != None and firstTex.node.bl_idname == "B3DTextureInput"):
+            if (firstTex != None and firstTex.node != None and firstTex.node.bl_idname == "B3DTextureInput"):
                 texNodes.append(firstTex.node)
             for i in range(2,8):
                 currTex = to_socket_from_socket.get(shaderNode.inputs[i],None)
