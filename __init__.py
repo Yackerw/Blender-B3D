@@ -271,7 +271,7 @@ def CreateBrus(obj,texs):
                 texNodes.append(firstTex.node)
             for i in range(2,8):
                 currTex = to_socket_from_socket.get(shaderNode.inputs[i],None)
-                if (currTex != None and currTex.node.bl_idname == "B3DTextureInput"):
+                if (currTex != None and currTex.node != None and currTex.node.bl_idname == "B3DTextureInput"):
                     texNodes.append(currTex.node)
             currBrus.shiny = shaderNode.inputs[9].default_value
             currBrus.a = shaderNode.inputs[11].default_value
@@ -385,6 +385,8 @@ def CreateMesh(obj,boneNodes,vertexGroups,conv_coords):
                         newVert.z = -obj.vertices[loop.vertex_index].undeformed_co.y
                         newVert.ny = loop.normal.z
                         newVert.nz = -loop.normal.y
+                        newVert.nx = -loop.normal.x
+                        newVert.x = -newVert.x
                     mag = math.sqrt((newVert.nx*newVert.nx)+(newVert.ny*newVert.ny)+(newVert.nz*newVert.nz))
                     newVert.nx /= mag
                     newVert.ny /= mag
@@ -482,6 +484,7 @@ def CreateBone(bone,ind,conv_coords):
     if (conv_coords):
         rotateQuat = mathutils.Euler((math.radians(-90),0,0), 'XYZ').to_quaternion()
         boneQuat = rotateQuat @ boneQuat
+        retNode.posX = -retNode.posX
     retNode.rotW = boneQuat.w
     retNode.rotX = boneQuat.x
     retNode.rotY = boneQuat.y
@@ -516,6 +519,7 @@ def CreateNode(obj,parent,conv_coords):
         if (conv_coords):
             retNode.posY = obj.location.z
             retNode.posZ = -obj.location.y
+            retNode.posX = -obj.location.x
         retNode.scaleX = obj.scale.x
         retNode.scaleY = obj.scale.y
         retNode.scaleZ = obj.scale.z
