@@ -14,7 +14,7 @@ bl_info = {
     "name": "Blender B3D",
     "description": "Exporter for Blitz3D B3D Models",
     "author": "Yacker",
-    "version": (0, 2, 0),
+    "version": (0, 3, 0),
     "blender": (4, 5, 2),
     "location": "File > Import-Export > B3D Model (.b3d) ",
     "warning": "",
@@ -364,10 +364,12 @@ def CreateMesh(obj,boneNodes,vertexGroups,conv_coords):
     if (len(bone_conv_list) == 0):
         bone_conv_list = None
     
+    currVert = 0
     for matId in range(0,len(obj.materials)):
         triBlock = TRISBlock()
         unoptimizedTris = []
         unoptimizedVerts = []
+        vertTuples = {}
         triBlock.brushId = matId
         for face in obj.polygons:
             if face.material_index == matId:
@@ -388,9 +390,10 @@ def CreateMesh(obj,boneNodes,vertexGroups,conv_coords):
                         newVert.nx = -loop.normal.x
                         newVert.x = -newVert.x
                     mag = math.sqrt((newVert.nx*newVert.nx)+(newVert.ny*newVert.ny)+(newVert.nz*newVert.nz))
-                    newVert.nx /= mag
-                    newVert.ny /= mag
-                    newVert.nz /= mag
+                    if (mag > 0):
+                        newVert.nx /= mag
+                        newVert.ny /= mag
+                        newVert.nz /= mag
                     if colors != None:
                         newVert.r = colors[loop_ind*4]
                         newVert.g = colors[(loop_ind*4)+1]
@@ -410,49 +413,14 @@ def CreateMesh(obj,boneNodes,vertexGroups,conv_coords):
                         uv = uv_layer.uv[loop_ind].vector
                         newVert.u.append(uv.x)
                         newVert.v.append(uv.y)
-                    unoptimizedVerts.append(newVert)
-                    unoptimizedTris.append(len(unoptimizedVerts)-1)
-        
-        # optimize vertex list
-        i = 0
-        while i < len(unoptimizedVerts):
-            currVert = unoptimizedVerts[i]
-            j = i+1
-            while j < len(unoptimizedVerts):
-                checkVert = unoptimizedVerts[j]
-                if currVert.x == checkVert.x and currVert.y == checkVert.y and currVert.z == checkVert.z:
-                    if currVert.nx == checkVert.nx and currVert.ny == checkVert.ny and currVert.nz == checkVert.nz:
-                        if currVert.r == checkVert.r and currVert.g == checkVert.g and currVert.b == checkVert.b and currVert.a == checkVert.a:
-                            validVert = True
-                            for x in range(0,len(checkVert.u)):
-                                if currVert.u[x] != checkVert.u[x] or currVert.v[x] != checkVert.v[x]:
-                                    validVert = False
-                                    break
-                            if validVert == False:
-                                j+=1
-                                continue
-                            for x in range(0,len(currVert.weightInds)):
-                                if currVert.weightInds[x] != checkVert.weightInds[x] or currVert.weights[x] != checkVert.weights[x]:
-                                    validVert = False
-                                    break
-                            if validVert == False:
-                                j+=1
-                                continue
-                            # identical vertex located, remove it
-                            unoptimizedVerts.pop(j)
-                            for x in range(0,len(unoptimizedTris)):
-                                if unoptimizedTris[x] == j:
-                                    unoptimizedTris[x] = i
-                                if unoptimizedTris[x] > j:
-                                    unoptimizedTris[x] -= 1
-                            j -= 1
-                j += 1
-            i += 1
-        
-        for i in range(0,len(unoptimizedTris)):
-            unoptimizedTris[i] += currVertCount
-        
-        currVertCount += len(unoptimizedVerts)
+                    vertAsTuple = ((newVert.x,newVert.y,newVert.z),(newVert.nx,newVert.ny,newVert.nz),(newVert.r,newVert.g,newVert.b,newVert.a),(tuple(newVert.u),tuple(newVert.v)), (tuple(newVert.weights), tuple(newVert.weightInds)))
+                    if not vertAsTuple in vertTuples:
+                        unoptimizedVerts.append(newVert)
+                        vertTuples[vertAsTuple] = currVert
+                        unoptimizedTris.append(currVert)
+                        currVert += 1
+                    else:
+                        unoptimizedTris.append(vertTuples[vertAsTuple])
         
         triBlock.tris = unoptimizedTris
         mesh.vertBlock.verts += unoptimizedVerts
@@ -669,17 +637,28 @@ def WriteVerts(f,verts):
             WriteFloat(f,v.u[i])
             WriteFloat(f,1-v.v[i])
 
-def WriteTris(f,tris):
+def WriteTris(f,tris,conv_coords):
     WriteUInt8(f,0x54)
     WriteUInt8(f,0x52)
     WriteUInt8(f,0x49)
     WriteUInt8(f,0x53)
     WriteUInt32(f,GetTriSize(tris))
     WriteUInt32(f,tris.brushId)
-    for t in tris.tris:
-        WriteUInt32(f,t)
+    i = 0
+    if conv_coords == False:
+        while i < len(tris.tris):
+            WriteUInt32(f,tris.tris[i])
+            WriteUInt32(f,tris.tris[i+1])
+            WriteUInt32(f,tris.tris[i+2])
+            i += 3
+    else:
+        while i < len(tris.tris):
+            WriteUInt32(f,tris.tris[i+2])
+            WriteUInt32(f,tris.tris[i+1])
+            WriteUInt32(f,tris.tris[i])
+            i += 3
 
-def WriteMesh(f,mesh):
+def WriteMesh(f,mesh,conv_coords):
     WriteUInt8(f,0x4D)
     WriteUInt8(f,0x45)
     WriteUInt8(f,0x53)
@@ -688,7 +667,7 @@ def WriteMesh(f,mesh):
     WriteInt32(f,mesh.brushId)
     WriteVerts(f,mesh.vertBlock)
     for x in mesh.triBlocks:
-        WriteTris(f,x)
+        WriteTris(f,x,conv_coords)
 
 def WriteBone(f,bone):
     WriteUInt8(f,0x42)
@@ -700,7 +679,7 @@ def WriteBone(f,bone):
         WriteUInt32(f,bone[i].vert)
         WriteFloat(f,bone[i].weight)
 
-def WriteNode(f,node):
+def WriteNode(f,node,conv_coords):
     WriteUInt8(f,0x4E)
     WriteUInt8(f,0x4F)
     WriteUInt8(f,0x44)
@@ -718,14 +697,14 @@ def WriteNode(f,node):
     WriteFloat(f,node.rotY)
     WriteFloat(f,node.rotZ)
     if node.mesh != None:
-        WriteMesh(f,node.mesh)
+        WriteMesh(f,node.mesh,conv_coords)
     if node.bone != None:
         WriteBone(f,node.bone)
     
     for subNode in node.subNodes:
-        WriteNode(f,subNode)
+        WriteNode(f,subNode,conv_coords)
 
-def WriteFile(texs,brus,node,filepath):
+def WriteFile(texs,brus,node,filepath,conv_coords):
     f = open(filepath,'wb')
     
     WriteUInt8(f,0x42) # BB3D
@@ -746,7 +725,7 @@ def WriteFile(texs,brus,node,filepath):
     if (texSize > 0):
         WriteTex(f,texs)
     WriteBrus(f,brus)
-    WriteNode(f,node)
+    WriteNode(f,node,conv_coords)
     
     f.close()
 
@@ -770,7 +749,7 @@ def b3d_export(filepath,conv_coords,combine_all):
             # iterate again to apply modifiers
             bpy.context.view_layer.objects.active = ob
             ob.select_set(True)
-            bpy.ops.object.make_single_user(object=True,obdata=True,material=True,animation=False,obdata_animation=False)
+            bpy.ops.object.make_single_user(object=True,obdata=True,material=False,animation=False,obdata_animation=False)
             for modifier in ob.modifiers:
                 bpy.ops.object.modifier_apply(modifier=modifier.name)
         curr_obj.select_set(True)
@@ -787,7 +766,7 @@ def b3d_export(filepath,conv_coords,combine_all):
     brus = CreateBrus(curr_obj,texs)
     node = CreateNode(curr_obj,None,conv_coords)
     
-    WriteFile(texs,brus,node,filepath)
+    WriteFile(texs,brus,node,filepath,conv_coords)
     
     if (combine_all):
         bpy.ops.object.delete()
