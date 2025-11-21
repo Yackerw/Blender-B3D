@@ -14,7 +14,7 @@ bl_info = {
     "name": "Blender B3D",
     "description": "Exporter for Blitz3D B3D Models",
     "author": "Yacker",
-    "version": (0, 3, 0),
+    "version": (0, 4, 0),
     "blender": (4, 5, 2),
     "location": "File > Import-Export > B3D Model (.b3d) ",
     "warning": "",
@@ -169,7 +169,7 @@ def GetFileFromDir(name):
 def CreateTexs(obj):
     TexsBlock = []#TEXSBlock()
     for mat in obj.data.materials:
-        if (mat == None):
+        if (mat == None or mat.node_tree == None):
             continue
         from_socket_to_socket = dict([[link.from_socket, link.to_socket] for link in mat.node_tree.links])
         to_socket_from_socket = dict([[link.to_socket, link.from_socket] for link in mat.node_tree.links])
@@ -246,7 +246,7 @@ def CreateBrus(obj,texs):
     BrusBlock = []
     for mat in obj.data.materials:
         currBrus = BRUSBlock()
-        if mat == None:
+        if mat == None or mat.node_tree == None:
             BrusBlock.append(currBrus)
             continue
         currBrus.mat_name = mat.name
@@ -750,8 +750,14 @@ def b3d_export(filepath,conv_coords,combine_all):
             bpy.context.view_layer.objects.active = ob
             ob.select_set(True)
             bpy.ops.object.make_single_user(object=True,obdata=True,material=False,animation=False,obdata_animation=False)
+            curr_mods = []
             for modifier in ob.modifiers:
-                bpy.ops.object.modifier_apply(modifier=modifier.name)
+                curr_mods.append(modifier.name)
+            for modifier in curr_mods:
+                try:
+                    bpy.ops.object.modifier_apply(modifier=modifier)
+                except:
+                    print("Skipping modifier...")
         curr_obj.select_set(True)
         bpy.context.view_layer.objects.active = curr_obj
         bpy.ops.object.join()
