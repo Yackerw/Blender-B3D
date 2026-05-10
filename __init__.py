@@ -93,6 +93,13 @@ class BRUSBlock():
         self.fx = 0 # 0x1 - fullbright, 0x2 - vert color, 0x4 - flat shading, 0x8 - no fog, 0x10 - double sided, 0x20 - vert alpha, 0x2000 - alpha test(mask), 0x4000 - conditional lights, 0x8000 - emissive?
         self.textures = []
 
+class KEYBlock():
+    def __init__(self):
+        self.flags = 0x4+0x2+0x1 # 0x4 = rotation, 0x2 = scale, 0x1 = position
+        self.positions = []
+        self.scales = []
+        self.rotations = []
+
 class NODEBlock():
     def __init__(self):
         self.mesh = None
@@ -109,8 +116,8 @@ class NODEBlock():
         self.rotY = 0
         self.rotZ = 0
         self.subNodes = []
-        self.keyNodes = []
-        self.animNodes = []
+        self.keyNode = None
+        self.animNode = False
         
         # here to keep things easy for me
         self.boneInd = -1
@@ -331,7 +338,7 @@ def ConvertBoneList(nodes,vertGroups,workList):
                 workList[v.index] = bone
         ConvertBoneList(bone.subNodes,vertGroups,workList)
 
-def CreateMesh(obj,boneNodes,vertexGroups,conv_coords):
+def CreateMesh(obj,boneNodes,vertexGroups,conv_coords,rigged):
     mesh = MESHBlock()
     mesh.vertBlock.tex_coord_count = len(obj.uv_layers)
     colors = None
@@ -438,19 +445,27 @@ def CreateMesh(obj,boneNodes,vertexGroups,conv_coords):
         mesh.vertBlock.flags |= 2
     return mesh
 
-def CreateBone(bone,ind,conv_coords):
+def CreateBone(bone,ind,skele,conv_coords):
     retNode = NODEBlock()
     retNode.bone = []
     retNode.name = bone.name
-    retNode.posX = bone.head.x
-    retNode.posY = bone.head.y
-    retNode.posZ = bone.head.z
+    tempMat = bone.matrix_local
+    if (bone.parent != None):
+        tempMat = bone.parent.matrix_local.inverted() @ tempMat
+    else:
+        tempMat = mathutils.Matrix().inverted() @ tempMat
+    tempPos,tempRot,tempScale = tempMat.decompose()
+    
+    retNode.posX = tempPos.x
+    retNode.posY = tempPos.y
+    retNode.posZ = tempPos.z
     if (conv_coords):
-        retNode.posY = bone.head.z
-        retNode.posZ = -bone.head.y
-    boneQuat = bone.matrix.to_quaternion()
+        retNode.posY = tempPos.z
+        retNode.posZ = -tempPos.y
+    boneQuat = tempRot
+    boneQuat = boneQuat.inverted()
     if (conv_coords):
-        rotateQuat = mathutils.Euler((math.radians(-90),0,0), 'XYZ').to_quaternion()
+        rotateQuat = mathutils.Euler((math.radians(90),0,0), 'XYZ').to_quaternion()
         boneQuat = rotateQuat @ boneQuat
         retNode.posX = -retNode.posX
     retNode.rotW = boneQuat.w
@@ -460,18 +475,48 @@ def CreateBone(bone,ind,conv_coords):
     retNode.boneInd = ind
     ind += 1
     for childBone in bone.children:
-        newBone,ind = CreateBone(childBone,ind,False) # don't recursively convert the coordinates! it'll curl up! only the bones without parents need conversion!
+        newBone,ind = CreateBone(childBone,ind,skele,False) # don't recursively convert the coordinates! it'll curl up! only the bones without parents need conversion!
         retNode.subNodes.append(newBone)
-    # TODO: animations
+    if (conv_coords):
+        retNode.scaleX = -1.0
+    
+    sce = bpy.context.scene
+    currKeys = KEYBlock()
+    for pb in skele.pose.bones:
+        if pb.bone != bone:
+            continue
+        for f in range(sce.frame_start,sce.frame_end):
+            sce.frame_set(f)
+            matr = pb.matrix
+            if (pb.parent != None):
+                matr = pb.parent.matrix.inverted() @ matr
+            pos,rot,scale = matr.decompose()
+            rot = rot.inverted()
+            if (conv_coords):
+                tempz = pos.z
+                pos.z = -pos.y
+                pos.y = tempz
+                pos.x = -pos.x
+                rotateQuat = mathutils.Euler((math.radians(90),0,0), 'XYZ').to_quaternion()
+                rot = rotateQuat @ rot
+            
+            currKeys.positions.append(pos)
+            currKeys.scales.append(scale)
+            currKeys.rotations.append(rot)
+    retNode.keyNode = currKeys
+    
     return retNode,ind
 
 def CreateNode(obj,parent,conv_coords):
     retNode = NODEBlock()
     retNode.name = obj.name
     if obj.type == 'MESH':
+        rigged = False
         for mod in obj.modifiers:
             if mod.type == 'ARMATURE' and mod.object != None and parent == None: # sorry, we only support one skeleton
-                CreateNode(mod.object,retNode)
+                CreateNode(mod.object,retNode,conv_coords)
+                retNode.animNode = True
+                rigged = True
         newmesh = obj.to_mesh(preserve_all_data_layers=True,depsgraph=bpy.context.evaluated_depsgraph_get())#obj.data.copy()
         bm = bmesh.new()
         bm.from_mesh(obj.data)
@@ -479,7 +524,7 @@ def CreateNode(obj,parent,conv_coords):
         bm.to_mesh(newmesh)
         bm.free()
         
-        retNode.mesh = CreateMesh(newmesh,retNode.subNodes,obj.vertex_groups,conv_coords)
+        retNode.mesh = CreateMesh(newmesh,retNode.subNodes,obj.vertex_groups,conv_coords,rigged)
         
         retNode.posX = obj.location.x
         retNode.posY = obj.location.y
@@ -500,7 +545,7 @@ def CreateNode(obj,parent,conv_coords):
         boneInd = 0
         for bone in obj.data.bones:
             if bone.parent == None:
-                newBone,boneInd = CreateBone(bone,boneInd,False) # coordinate conversion shouldn't be necessary on bones? as they're relative to the parent mesh?
+                newBone,boneInd = CreateBone(bone,boneInd,obj,conv_coords)
                 parent.subNodes.append(newBone)
     
     """for ob in obj.children:
@@ -548,6 +593,9 @@ def GetMeshSize(mesh):
 def GetBoneSize(bone):
     return 8 * len(bone)
 
+def GetKeySize(keys):
+    return 4 + (len(keys.positions)*(0xC+0xC+0x10+0x4))
+
 def GetNodeSize(node):
     nodeSize = len(node.name)+1
     nodeSize += 0x28
@@ -558,6 +606,10 @@ def GetNodeSize(node):
         nodeSize += 8 + GetMeshSize(node.mesh)
     if (node.bone != None):
         nodeSize += 8 + GetBoneSize(node.bone)
+    if (node.animNode == True):
+        nodeSize += 0x14
+    if (node.keyNode != None):
+        nodeSize += 8 + GetKeySize(node.keyNode)
     
     return nodeSize
 
@@ -679,6 +731,36 @@ def WriteBone(f,bone):
         WriteUInt32(f,bone[i].vert)
         WriteFloat(f,bone[i].weight)
 
+def WriteAnim(f):
+    WriteUInt8(f, 0x41)
+    WriteUInt8(f, 0x4E)
+    WriteUInt8(f, 0x49)
+    WriteUInt8(f, 0x4D)
+    WriteUInt32(f, 0xC) # sized
+    WriteUInt32(f, 0) # flags; unused
+    WriteUInt32(f, (bpy.context.scene.frame_end-bpy.context.scene.frame_start)+1) # frames
+    WriteFloat(f, bpy.context.scene.render.fps) # fps; not used
+
+def WriteKeys(f, keys):
+    WriteUInt8(f, 0x4B)
+    WriteUInt8(f, 0x45)
+    WriteUInt8(f, 0x59)
+    WriteUInt8(f, 0x53)
+    WriteUInt32(f,GetKeySize(keys))
+    WriteUInt32(f, keys.flags)
+    for i in range(0,len(keys.positions)):
+        WriteUInt32(f, i)
+        WriteFloat(f, keys.positions[i].x)
+        WriteFloat(f, keys.positions[i].y)
+        WriteFloat(f, keys.positions[i].z)
+        WriteFloat(f, keys.scales[i].x)
+        WriteFloat(f, keys.scales[i].y)
+        WriteFloat(f, keys.scales[i].z)
+        WriteFloat(f, keys.rotations[i].w)
+        WriteFloat(f, keys.rotations[i].x)
+        WriteFloat(f, keys.rotations[i].y)
+        WriteFloat(f, keys.rotations[i].z)
+
 def WriteNode(f,node,conv_coords):
     WriteUInt8(f,0x4E)
     WriteUInt8(f,0x4F)
@@ -697,9 +779,16 @@ def WriteNode(f,node,conv_coords):
     WriteFloat(f,node.rotY)
     WriteFloat(f,node.rotZ)
     if node.mesh != None:
-        WriteMesh(f,node.mesh,conv_coords)
+        tempconv_coords = conv_coords
+        if node.animNode == True:
+            tempconv_coords = False
+        WriteMesh(f,node.mesh,tempconv_coords)
     if node.bone != None:
         WriteBone(f,node.bone)
+    if node.keyNode != None:
+        WriteKeys(f, node.keyNode)
+    if node.animNode == True:
+        WriteAnim(f)
     
     for subNode in node.subNodes:
         WriteNode(f,subNode,conv_coords)
