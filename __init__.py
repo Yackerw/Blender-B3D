@@ -519,17 +519,22 @@ def CreateAnimation(parentMostNode, conv_coords):
         for child in parentMostNode.subNodes:
             GetAnimationMatrix(child, conv_coords)
 
-def CreateNode(obj,parent,conv_coords):
+def CreateNode(obj,parent,conv_coords,armatureOverride):
     retNode = NODEBlock()
     retNode.name = obj.name
     if obj.type == 'MESH':
         rigged = False
+        armature = None
         for mod in obj.modifiers:
             if mod.type == 'ARMATURE' and mod.object != None and parent == None: # sorry, we only support one skeleton
-                CreateNode(mod.object,retNode,conv_coords)
-                CreateAnimation(retNode, conv_coords)
-                retNode.animNode = True
-                rigged = True
+                armature = mod.object
+        if (armature == None):
+            armature = armatureOverride
+        if (armature != None):
+            CreateNode(armature,retNode,conv_coords,None)
+            CreateAnimation(retNode, conv_coords)
+            retNode.animNode = True
+            rigged = True
         newmesh = obj.to_mesh(preserve_all_data_layers=True,depsgraph=bpy.context.evaluated_depsgraph_get())#obj.data.copy()
         bm = bmesh.new()
         bm.from_mesh(obj.data)
@@ -834,6 +839,7 @@ def WriteFile(texs,brus,node,filepath,conv_coords):
 def b3d_export(filepath,conv_coords,combine_all):
     # need current object...
     curr_obj = bpy.context.active_object
+    armatureOverride = None
     if (combine_all):
         curr_mesh = bpy.data.meshes.new("mesh")
         curr_obj = bpy.data.objects.new("TempMesh", curr_mesh)
@@ -841,6 +847,9 @@ def b3d_export(filepath,conv_coords,combine_all):
         new_objs = []
         for ob in bpy.context.selected_objects:
             if (ob.type == 'MESH'):
+                for modifier in ob.modifiers:
+                    if modifier.type == 'ARMATURE':
+                        armatureOverride = modifier.object
                 new_mesh = ob.data.copy()
                 new_obj = ob.copy()
                 new_obj.data = new_mesh
@@ -857,6 +866,8 @@ def b3d_export(filepath,conv_coords,combine_all):
                 curr_mods.append(modifier.name)
             for modifier in curr_mods:
                 try:
+                    if (modifier.type == 'ARMATURE'): # maintain armature for anim exporting!
+                        continue
                     bpy.ops.object.modifier_apply(modifier=modifier)
                 except:
                     print("Skipping modifier...")
@@ -872,7 +883,7 @@ def b3d_export(filepath,conv_coords,combine_all):
     
     texs = CreateTexs(curr_obj)
     brus = CreateBrus(curr_obj,texs)
-    node = CreateNode(curr_obj,None,conv_coords)
+    node = CreateNode(curr_obj,None,conv_coords,armatureOverride)
     
     WriteFile(texs,brus,node,filepath,conv_coords)
     
