@@ -121,6 +121,7 @@ class NODEBlock():
         
         # here to keep things easy for me
         self.boneInd = -1
+        self.poseBone = None
 
 class BONEBlock():
     def __init__(self):
@@ -480,32 +481,43 @@ def CreateBone(bone,ind,skele,conv_coords):
     if (conv_coords):
         retNode.scaleX = -1.0
     
-    sce = bpy.context.scene
     currKeys = KEYBlock()
     for pb in skele.pose.bones:
         if pb.bone != bone:
             continue
-        for f in range(sce.frame_start,sce.frame_end):
-            sce.frame_set(f)
-            matr = pb.matrix
-            if (pb.parent != None):
-                matr = pb.parent.matrix.inverted() @ matr
-            pos,rot,scale = matr.decompose()
-            rot = rot.inverted()
-            if (conv_coords):
-                tempz = pos.z
-                pos.z = -pos.y
-                pos.y = tempz
-                pos.x = -pos.x
-                rotateQuat = mathutils.Euler((math.radians(90),0,0), 'XYZ').to_quaternion()
-                rot = rotateQuat @ rot
-            
-            currKeys.positions.append(pos)
-            currKeys.scales.append(scale)
-            currKeys.rotations.append(rot)
+        retNode.poseBone = pb
     retNode.keyNode = currKeys
     
     return retNode,ind
+
+def GetAnimationMatrix(bone, conv_coords):
+    pb = bone.poseBone
+    matr = pb.matrix
+    if (pb.parent != None):
+        matr = pb.parent.matrix.inverted() @ matr
+    pos,rot,scale = matr.decompose()
+    rot = rot.inverted()
+    if (conv_coords):
+        tempz = pos.z
+        pos.z = -pos.y
+        pos.y = tempz
+        pos.x = -pos.x
+        rotateQuat = mathutils.Euler((math.radians(90),0,0), 'XYZ').to_quaternion()
+        rot = rotateQuat @ rot
+    
+    bone.keyNode.positions.append(pos)
+    bone.keyNode.scales.append(scale)
+    bone.keyNode.rotations.append(rot)
+    
+    for child in bone.subNodes:
+        GetAnimationMatrix(child, False)
+
+def CreateAnimation(parentMostNode, conv_coords):
+    sce = bpy.context.scene
+    for f in range(sce.frame_start,sce.frame_end):
+        sce.frame_set(f)
+        for child in parentMostNode.subNodes:
+            GetAnimationMatrix(child, conv_coords)
 
 def CreateNode(obj,parent,conv_coords):
     retNode = NODEBlock()
@@ -515,6 +527,7 @@ def CreateNode(obj,parent,conv_coords):
         for mod in obj.modifiers:
             if mod.type == 'ARMATURE' and mod.object != None and parent == None: # sorry, we only support one skeleton
                 CreateNode(mod.object,retNode,conv_coords)
+                CreateAnimation(retNode, conv_coords)
                 retNode.animNode = True
                 rigged = True
         newmesh = obj.to_mesh(preserve_all_data_layers=True,depsgraph=bpy.context.evaluated_depsgraph_get())#obj.data.copy()
