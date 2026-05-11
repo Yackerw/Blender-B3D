@@ -252,6 +252,9 @@ def CreateTexs(obj):
 
 def CreateBrus(obj,texs):
     BrusBlock = []
+    if (len(obj.data.materials) == 0):
+        BrusBlock.append(BRUSBlock())
+        return BrusBlock
     for mat in obj.data.materials:
         currBrus = BRUSBlock()
         if mat == None or mat.node_tree == None:
@@ -373,7 +376,7 @@ def CreateMesh(obj,boneNodes,vertexGroups,conv_coords,rigged):
         bone_conv_list = None
     
     currVert = 0
-    for matId in range(0,len(obj.materials)):
+    for matId in range(0,max(len(obj.materials),1)):
         triBlock = TRISBlock()
         unoptimizedTris = []
         unoptimizedVerts = []
@@ -877,8 +880,6 @@ def b3d_export(filepath,conv_coords,combine_all):
     if (curr_obj == None):
         return {'CANCELLED'}
     if (curr_obj.type != 'MESH'):
-        return {'CANCELLED'}
-    if (len(curr_obj.data.materials) == 0):
         return {'CANCELLED'}
     
     texs = CreateTexs(curr_obj)
