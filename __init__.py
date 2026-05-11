@@ -1302,6 +1302,15 @@ class MakeGroups:
         var.inputs[2].default_value = 0.5
         var.operation = 'MULTIPLY'
         var.use_clamp = False
+        
+        var = tree.nodes.new(type='ShaderNodeMath')
+        var.name = 'Math.003'
+        var.location = (-440, -60)
+        var.inputs[0].default_value = 1.0
+        var.inputs[1].default_value = 1.0
+        var.inputs[2].default_value = 0.5
+        var.operation = 'SUBTRACT'
+        var.use_clamp = False
 
         # Group Node links
         tree.links.new(tree.nodes["Group Input"].outputs[9], tree.nodes["Specular BSDF"].inputs[1])
@@ -1317,6 +1326,8 @@ class MakeGroups:
         tree.links.new(tree.nodes["Math.002"].outputs[0], tree.nodes["Math"].inputs[1])
         tree.links.new(tree.nodes["Math.001"].outputs[0], tree.nodes["Math.002"].inputs[0])
         tree.links.new(tree.nodes["Group Input"].outputs[1], tree.nodes["Math.002"].inputs[1])
+        tree.links.new(tree.nodes["Math.003"].outputs[0], tree.nodes["Specular BSDF"].inputs[2])
+        tree.links.new(tree.nodes["Group Input"].outputs[9], tree.nodes["Math.003"].inputs[1])
 
 
 @persistent
