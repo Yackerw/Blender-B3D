@@ -869,8 +869,9 @@ def b3d_export(filepath,conv_coords,combine_all):
                 curr_mods.append(modifier.name)
             for modifier in curr_mods:
                 try:
-                    if (modifier.type == 'ARMATURE'): # maintain armature for anim exporting!
-                        continue
+                    #if (modifier.type == 'ARMATURE'): # maintain armature for anim exporting!
+                    #    continue
+                    # for unknown reasons, the above code does not work. literally at all. it skips ALL MODIFIERS???
                     bpy.ops.object.modifier_apply(modifier=modifier)
                 except:
                     print("Skipping modifier...")
