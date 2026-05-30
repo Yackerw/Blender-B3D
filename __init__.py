@@ -410,11 +410,11 @@ def CreateMesh(obj,boneNodes,vertexGroups,conv_coords,rigged):
                         newVert.g = colors[(loop_ind*4)+1]
                         newVert.b = colors[(loop_ind*4)+2]
                         newVert.a = colors[(loop_ind*4)+3]
-                        if (colorsAsFloat == False):
+                        """if (colorsAsFloat == False):
                             newVert.r /= 255
                             newVert.g /= 255
                             newVert.b /= 255
-                            newVert.a /= 255
+                            newVert.a /= 255"""
                     if (bone_conv_list != None):
                         for g in obj.vertices[loop.vertex_index].groups:
                             if (bone_conv_list[g.group] != None):
