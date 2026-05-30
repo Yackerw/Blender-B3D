@@ -1060,50 +1060,54 @@ class ShaderNodeB3D(CustomNodetreeNodeBaseNN, ShaderNodeCustomGroup):
 
 class MakeGroups:
     def execute(self):
-        if '_B3D_NODE' in bpy.data.node_groups:
-            return
+        #if '_B3D_NODE' in bpy.data.node_groups:
+        #    return
         self.B3DGroup()
         self.B3DTexNode()
     
     @staticmethod
     def B3DTexNode():
-        tree = bpy.data.node_groups.new('_B3D_TEX', 'ShaderNodeTree')
+        tree = None
+        if '_B3D_TEX' in bpy.data.node_groups:
+            tree = bpy.data.node_groups['_B3D_TEX']
+        else:
+            tree = bpy.data.node_groups.new('_B3D_TEX', 'ShaderNodeTree')
+
+            # Group inputs
+            var = tree.interface.new_socket(name='Texture',  in_out='INPUT', socket_type='NodeSocketColor')
+            var.hide_value = True
+            var.default_value = (1.0,1.0,1.0, 1.0)
+
+            var = tree.interface.new_socket(name='Color',  in_out='INPUT', socket_type='NodeSocketBool')
+            var.hide_value = False
+            var.default_value = True
+
+            var = tree.interface.new_socket(name='Alpha',  in_out='INPUT', socket_type='NodeSocketBool')
+            var.hide_value = False
+            var.default_value = False
+
+            var = tree.interface.new_socket(name='AlphaMask',  in_out='INPUT', socket_type='NodeSocketBool')
+            var.hide_value = False
+            var.default_value = False
+
+            var = tree.interface.new_socket(name='MipMap',  in_out='INPUT', socket_type='NodeSocketBool')
+            var.hide_value = False
+            var.default_value = True
+
+            var = tree.interface.new_socket(name='UV2',  in_out='INPUT', socket_type='NodeSocketBool')
+            var.hide_value = False
+            var.default_value = False
+
+            var = tree.interface.new_socket(name='NearestNeighbor',  in_out='INPUT', socket_type='NodeSocketBool')
+            var.hide_value = False
+            var.default_value = False
+
+            # Group outputs
+            var = tree.interface.new_socket(name='Color',  in_out='OUTPUT', socket_type='NodeSocketColor')
+            var.hide_value = False
+            var.default_value = (0.800000011920929, 0.800000011920929, 0.800000011920929, 1.0)
+
         tree.use_fake_user = True
-
-        # Group inputs
-        var = tree.interface.new_socket(name='Texture',  in_out='INPUT', socket_type='NodeSocketColor')
-        var.hide_value = True
-        var.default_value = (1.0,1.0,1.0, 1.0)
-
-        var = tree.interface.new_socket(name='Color',  in_out='INPUT', socket_type='NodeSocketBool')
-        var.hide_value = False
-        var.default_value = True
-
-        var = tree.interface.new_socket(name='Alpha',  in_out='INPUT', socket_type='NodeSocketBool')
-        var.hide_value = False
-        var.default_value = False
-
-        var = tree.interface.new_socket(name='AlphaMask',  in_out='INPUT', socket_type='NodeSocketBool')
-        var.hide_value = False
-        var.default_value = False
-
-        var = tree.interface.new_socket(name='MipMap',  in_out='INPUT', socket_type='NodeSocketBool')
-        var.hide_value = False
-        var.default_value = True
-
-        var = tree.interface.new_socket(name='UV2',  in_out='INPUT', socket_type='NodeSocketBool')
-        var.hide_value = False
-        var.default_value = False
-
-        var = tree.interface.new_socket(name='NearestNeighbor',  in_out='INPUT', socket_type='NodeSocketBool')
-        var.hide_value = False
-        var.default_value = False
-
-        # Group outputs
-        var = tree.interface.new_socket(name='Color',  in_out='OUTPUT', socket_type='NodeSocketColor')
-        var.hide_value = False
-        var.default_value = (0.800000011920929, 0.800000011920929, 0.800000011920929, 1.0)
-
         # Group Nodes
         var = tree.nodes.new(type='NodeGroupInput')
         var.name = 'Group Input'
@@ -1138,98 +1142,103 @@ class MakeGroups:
     
     @staticmethod
     def B3DGroup():
-        tree = bpy.data.node_groups.new('_B3D_NODE', 'ShaderNodeTree')
+        tree = None
+        if '_B3D_NODE' in bpy.data.node_groups:
+            tree = bpy.data.node_groups['_B3D_NODE']
+            tree.nodes.clear()
+        else:
+            tree = bpy.data.node_groups.new('_B3D_NODE', 'ShaderNodeTree')
+
+            # Group inputs
+            var = tree.interface.new_socket(name='Texture1',  in_out='INPUT', socket_type='NodeSocketColor')
+            var.hide_value = True
+            var.default_value = (0.800000011920929, 0.800000011920929, 0.800000011920929, 1.0)
+
+            var = tree.interface.new_socket(name='Texture1Alpha',  in_out='INPUT', socket_type='NodeSocketFloat')
+            var.min_value = -3.4028234663852886e+38
+            var.max_value = 3.4028234663852886e+38
+            var.hide_value = True
+            var.default_value = 1.0
+
+            var = tree.interface.new_socket(name='Texture2',  in_out='INPUT', socket_type='NodeSocketColor')
+            var.hide_value = True
+            var.default_value = (0.0, 0.0, 0.0, 1.0)
+
+            var = tree.interface.new_socket(name='Texture3',  in_out='INPUT', socket_type='NodeSocketColor')
+            var.hide_value = True
+            var.default_value = (0.0, 0.0, 0.0, 1.0)
+
+            var = tree.interface.new_socket(name='Texture4',  in_out='INPUT', socket_type='NodeSocketColor')
+            var.hide_value = True
+            var.default_value = (0.0, 0.0, 0.0, 1.0)
+
+            var = tree.interface.new_socket(name='Texture5',  in_out='INPUT', socket_type='NodeSocketColor')
+            var.hide_value = True
+            var.default_value = (0.0, 0.0, 0.0, 1.0)
+
+            var = tree.interface.new_socket(name='Texture6',  in_out='INPUT', socket_type='NodeSocketColor')
+            var.hide_value = True
+            var.default_value = (0.0, 0.0, 0.0, 1.0)
+
+            var = tree.interface.new_socket(name='Texture7',  in_out='INPUT', socket_type='NodeSocketColor')
+            var.hide_value = True
+            var.default_value = (0.0, 0.0, 0.0, 1.0)
+
+            var = tree.interface.new_socket(name='Texture8',  in_out='INPUT', socket_type='NodeSocketColor')
+            var.hide_value = True
+            var.default_value = (0.0, 0.0, 0.0, 1.0)
+
+            var = tree.interface.new_socket(name='Specular',  in_out='INPUT', socket_type='NodeSocketFloat')
+            var.min_value = 0
+            var.max_value = 1.0
+            var.hide_value = False
+            var.default_value = 0.0
+
+            var = tree.interface.new_socket(name='Color',  in_out='INPUT', socket_type='NodeSocketColor')
+            var.hide_value = False
+            var.default_value = (1.0, 1.0, 1.0, 1.0)
+
+            var = tree.interface.new_socket(name='Alpha',  in_out='INPUT', socket_type='NodeSocketFloat')
+            var.min_value = 0
+            var.max_value = 1.0
+            var.hide_value = False
+            var.default_value = 1.0
+
+            var = tree.interface.new_socket(name='VertexColor',  in_out='INPUT', socket_type='NodeSocketColor')
+            var.hide_value = True
+            var.default_value = (1.0, 1.0, 1.0, 1.0)
+
+            var = tree.interface.new_socket(name='FullBright',  in_out='INPUT', socket_type='NodeSocketBool')
+            var.hide_value = False
+            var.default_value = False
+
+            var = tree.interface.new_socket(name='FlatShading',  in_out='INPUT', socket_type='NodeSocketBool')
+            var.hide_value = False
+            var.default_value = False
+
+            var = tree.interface.new_socket(name='Fog',  in_out='INPUT', socket_type='NodeSocketBool')
+            var.hide_value = False
+            var.default_value = True
+
+            var = tree.interface.new_socket(name='DoubleSided',  in_out='INPUT', socket_type='NodeSocketBool')
+            var.hide_value = False
+            var.default_value = False
+
+            var = tree.interface.new_socket(name='AlphaMask',  in_out='INPUT', socket_type='NodeSocketBool')
+            var.hide_value = False
+            var.default_value = False
+
+            var = tree.interface.new_socket(name='VertexAlpha',  in_out='INPUT', socket_type='NodeSocketFloat')
+            var.min_value = -3.4028234663852886e+38
+            var.max_value = 3.4028234663852886e+38
+            var.hide_value = True
+            var.default_value = 1.0
+
+            # Group outputs
+            var = tree.interface.new_socket(name='BSDF',  in_out='OUTPUT', socket_type='NodeSocketShader')
+            var.hide_value = False
+
         tree.use_fake_user = True
-
-        # Group inputs
-        var = tree.interface.new_socket(name='Texture1',  in_out='INPUT', socket_type='NodeSocketColor')
-        var.hide_value = True
-        var.default_value = (0.800000011920929, 0.800000011920929, 0.800000011920929, 1.0)
-
-        var = tree.interface.new_socket(name='Texture1Alpha',  in_out='INPUT', socket_type='NodeSocketFloat')
-        var.min_value = -3.4028234663852886e+38
-        var.max_value = 3.4028234663852886e+38
-        var.hide_value = True
-        var.default_value = 1.0
-
-        var = tree.interface.new_socket(name='Texture2',  in_out='INPUT', socket_type='NodeSocketColor')
-        var.hide_value = True
-        var.default_value = (0.0, 0.0, 0.0, 1.0)
-
-        var = tree.interface.new_socket(name='Texture3',  in_out='INPUT', socket_type='NodeSocketColor')
-        var.hide_value = True
-        var.default_value = (0.0, 0.0, 0.0, 1.0)
-
-        var = tree.interface.new_socket(name='Texture4',  in_out='INPUT', socket_type='NodeSocketColor')
-        var.hide_value = True
-        var.default_value = (0.0, 0.0, 0.0, 1.0)
-
-        var = tree.interface.new_socket(name='Texture5',  in_out='INPUT', socket_type='NodeSocketColor')
-        var.hide_value = True
-        var.default_value = (0.0, 0.0, 0.0, 1.0)
-
-        var = tree.interface.new_socket(name='Texture6',  in_out='INPUT', socket_type='NodeSocketColor')
-        var.hide_value = True
-        var.default_value = (0.0, 0.0, 0.0, 1.0)
-
-        var = tree.interface.new_socket(name='Texture7',  in_out='INPUT', socket_type='NodeSocketColor')
-        var.hide_value = True
-        var.default_value = (0.0, 0.0, 0.0, 1.0)
-
-        var = tree.interface.new_socket(name='Texture8',  in_out='INPUT', socket_type='NodeSocketColor')
-        var.hide_value = True
-        var.default_value = (0.0, 0.0, 0.0, 1.0)
-
-        var = tree.interface.new_socket(name='Specular',  in_out='INPUT', socket_type='NodeSocketFloat')
-        var.min_value = 0
-        var.max_value = 1.0
-        var.hide_value = False
-        var.default_value = 0.0
-
-        var = tree.interface.new_socket(name='Color',  in_out='INPUT', socket_type='NodeSocketColor')
-        var.hide_value = False
-        var.default_value = (1.0, 1.0, 1.0, 1.0)
-
-        var = tree.interface.new_socket(name='Alpha',  in_out='INPUT', socket_type='NodeSocketFloat')
-        var.min_value = 0
-        var.max_value = 1.0
-        var.hide_value = False
-        var.default_value = 1.0
-
-        var = tree.interface.new_socket(name='VertexColor',  in_out='INPUT', socket_type='NodeSocketColor')
-        var.hide_value = True
-        var.default_value = (1.0, 1.0, 1.0, 1.0)
-
-        var = tree.interface.new_socket(name='FullBright',  in_out='INPUT', socket_type='NodeSocketBool')
-        var.hide_value = False
-        var.default_value = False
-
-        var = tree.interface.new_socket(name='FlatShading',  in_out='INPUT', socket_type='NodeSocketBool')
-        var.hide_value = False
-        var.default_value = False
-
-        var = tree.interface.new_socket(name='Fog',  in_out='INPUT', socket_type='NodeSocketBool')
-        var.hide_value = False
-        var.default_value = True
-
-        var = tree.interface.new_socket(name='DoubleSided',  in_out='INPUT', socket_type='NodeSocketBool')
-        var.hide_value = False
-        var.default_value = False
-
-        var = tree.interface.new_socket(name='AlphaMask',  in_out='INPUT', socket_type='NodeSocketBool')
-        var.hide_value = False
-        var.default_value = False
-
-        var = tree.interface.new_socket(name='VertexAlpha',  in_out='INPUT', socket_type='NodeSocketFloat')
-        var.min_value = -3.4028234663852886e+38
-        var.max_value = 3.4028234663852886e+38
-        var.hide_value = True
-        var.default_value = 1.0
-
-        # Group outputs
-        var = tree.interface.new_socket(name='BSDF',  in_out='OUTPUT', socket_type='NodeSocketShader')
-        var.hide_value = False
-
         # Group Nodes
         var = tree.nodes.new(type='NodeGroupInput')
         var.name = 'Group Input'
