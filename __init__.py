@@ -280,10 +280,14 @@ def CreateBrus(obj,texs):
             firstTex = to_socket_from_socket.get(shaderNode.inputs[0],None)
             if (firstTex != None and firstTex.node != None and firstTex.node.bl_idname == "B3DTextureInput"):
                 texNodes.append(firstTex.node)
+            else:
+                texNodes.append(None)
             for i in range(2,8):
                 currTex = to_socket_from_socket.get(shaderNode.inputs[i],None)
                 if (currTex != None and currTex.node != None and currTex.node.bl_idname == "B3DTextureInput"):
                     texNodes.append(currTex.node)
+                else:
+                    texNodes.append(None)
             currBrus.shiny = shaderNode.inputs[9].default_value
             currBrus.a = shaderNode.inputs[11].default_value
             currBrus.r = shaderNode.inputs[10].default_value[0]
@@ -292,6 +296,9 @@ def CreateBrus(obj,texs):
             
             # append the textures
             for tex in texNodes:
+                if (tex == None):
+                    currBrus.textures.append(-1)
+                    continue
                 texImage = to_socket_from_socket.get(tex.inputs[0], None)
                 if (texImage != None and texImage.node.bl_idname == "ShaderNodeTexImage"):
                     for i in range(0,len(texs)):
@@ -679,7 +686,7 @@ def WriteBrus(f, brus):
         i = 0
         while i < 8:
             if i < len(bru.textures):
-                WriteUInt32(f,bru.textures[i])
+                WriteInt32(f,bru.textures[i])
             else:
                 WriteInt32(f,-1)
             i += 1
