@@ -1078,6 +1078,7 @@ class MakeGroups:
         tree = None
         if '_B3D_TEX' in bpy.data.node_groups:
             tree = bpy.data.node_groups['_B3D_TEX']
+            tree.nodes.clear()
         else:
             tree = bpy.data.node_groups.new('_B3D_TEX', 'ShaderNodeTree')
 
