@@ -122,6 +122,7 @@ class NODEBlock():
         # here to keep things easy for me
         self.boneInd = -1
         self.poseBone = None
+        self.blenderOb = None
 
 class BONEBlock():
     def __init__(self):
@@ -464,7 +465,8 @@ def CreateBone(bone,ind,skele,conv_coords):
     if (bone.parent != None):
         tempMat = bone.parent.matrix_local.inverted() @ tempMat
     else:
-        tempMat = mathutils.Matrix().inverted() @ tempMat
+        tempMat = skele.matrix_world @ tempMat
+    retNode.blenderOb = skele
     tempPos,tempRot,tempScale = tempMat.decompose()
     
     retNode.posX = tempPos.x
@@ -477,7 +479,7 @@ def CreateBone(bone,ind,skele,conv_coords):
     boneQuat = boneQuat.inverted()
     if (conv_coords):
         rotateQuat = mathutils.Euler((math.radians(90),0,0), 'XYZ').to_quaternion()
-        boneQuat = rotateQuat @ boneQuat
+        boneQuat = boneQuat @ rotateQuat
         retNode.posX = -retNode.posX
     retNode.rotW = boneQuat.w
     retNode.rotX = boneQuat.x
@@ -485,11 +487,16 @@ def CreateBone(bone,ind,skele,conv_coords):
     retNode.rotZ = boneQuat.z
     retNode.boneInd = ind
     ind += 1
+    retNode.scaleX = tempScale.x
+    retNode.scaleY = tempScale.y
+    retNode.scaleZ = tempScale.z
     for childBone in bone.children:
         newBone,ind = CreateBone(childBone,ind,skele,False) # don't recursively convert the coordinates! it'll curl up! only the bones without parents need conversion!
         retNode.subNodes.append(newBone)
     if (conv_coords):
-        retNode.scaleX = -1.0
+        retNode.scaleX = -retNode.scaleX
+        retNode.scaleY = tempScale.z
+        retNode.scaleZ = tempScale.y
     
     currKeys = KEYBlock()
     for pb in skele.pose.bones:
@@ -505,6 +512,8 @@ def GetAnimationMatrix(bone, conv_coords):
     matr = pb.matrix
     if (pb.parent != None):
         matr = pb.parent.matrix.inverted() @ matr
+    else:
+        matr = bone.blenderOb.matrix_world @ matr
     pos,rot,scale = matr.decompose()
     rot = rot.inverted()
     if (conv_coords):
@@ -513,7 +522,7 @@ def GetAnimationMatrix(bone, conv_coords):
         pos.y = tempz
         pos.x = -pos.x
         rotateQuat = mathutils.Euler((math.radians(90),0,0), 'XYZ').to_quaternion()
-        rot = rotateQuat @ rot
+        rot = rot @ rotateQuat
     
     bone.keyNode.positions.append(pos)
     bone.keyNode.scales.append(scale)
