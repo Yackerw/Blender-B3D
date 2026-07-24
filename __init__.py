@@ -480,6 +480,7 @@ def CreateBone(bone,ind,skele,conv_coords):
     if (conv_coords):
         rotateQuat = mathutils.Euler((math.radians(90),0,0), 'XYZ').to_quaternion()
         boneQuat = boneQuat @ rotateQuat
+        boneQuat = boneQuat.normalized()
         retNode.posX = -retNode.posX
     retNode.rotW = boneQuat.w
     retNode.rotX = boneQuat.x
@@ -523,6 +524,7 @@ def GetAnimationMatrix(bone, conv_coords):
         pos.x = -pos.x
         rotateQuat = mathutils.Euler((math.radians(90),0,0), 'XYZ').to_quaternion()
         rot = rot @ rotateQuat
+        rot = rot.normalized()
     
     bone.keyNode.positions.append(pos)
     bone.keyNode.scales.append(scale)
@@ -869,6 +871,7 @@ def b3d_export(filepath,conv_coords,combine_all):
                 for modifier in ob.modifiers:
                     if modifier.type == 'ARMATURE':
                         armatureOverride = modifier.object
+                        armatureOverride.data.pose_position = 'REST'
                 new_mesh = ob.data.copy()
                 new_obj = ob.copy()
                 new_obj.data = new_mesh
@@ -899,6 +902,7 @@ def b3d_export(filepath,conv_coords,combine_all):
     if (curr_obj.type != 'MESH'):
         return {'CANCELLED'}
     
+    armatureOverride.data.pose_position = 'POSE'
     texs = CreateTexs(curr_obj)
     brus = CreateBrus(curr_obj,texs)
     node = CreateNode(curr_obj,None,conv_coords,armatureOverride)
