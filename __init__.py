@@ -362,8 +362,8 @@ def CreateMesh(obj,boneNodes,vertexGroups,conv_coords,rigged):
             colorsAsFloat = False
         col = [0, 0, 0, 0] * len(colors.data)
         colors.data.foreach_get("color", col)
-        if list(set(col)) == [1.0]:
-            col = None
+        #if list(set(col)) == [1.0]:
+        #    col = None
         
         if (colors.domain == "POINT"):
             # convert to corner
