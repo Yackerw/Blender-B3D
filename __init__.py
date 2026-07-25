@@ -902,7 +902,8 @@ def b3d_export(filepath,conv_coords,combine_all):
     if (curr_obj.type != 'MESH'):
         return {'CANCELLED'}
     
-    armatureOverride.data.pose_position = 'POSE'
+    if (armatureOverride != None):
+        armatureOverride.data.pose_position = 'POSE'
     texs = CreateTexs(curr_obj)
     brus = CreateBrus(curr_obj,texs)
     node = CreateNode(curr_obj,None,conv_coords,armatureOverride)
