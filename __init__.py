@@ -481,6 +481,8 @@ def CreateBone(bone,ind,skele,conv_coords):
         rotateQuat = mathutils.Euler((math.radians(90),0,0), 'XYZ').to_quaternion()
         boneQuat = boneQuat @ rotateQuat
         boneQuat = boneQuat.normalized()
+        boneQuat.y = -boneQuat.y
+        boneQuat.z = -boneQuat.z
         retNode.posX = -retNode.posX
     retNode.rotW = boneQuat.w
     retNode.rotX = boneQuat.x
@@ -525,6 +527,8 @@ def GetAnimationMatrix(bone, conv_coords):
         rotateQuat = mathutils.Euler((math.radians(90),0,0), 'XYZ').to_quaternion()
         rot = rot @ rotateQuat
         rot = rot.normalized()
+        rot.y = -rot.y
+        rot.z = -rot.z
     
     bone.keyNode.positions.append(pos)
     bone.keyNode.scales.append(scale)
