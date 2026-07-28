@@ -67,8 +67,12 @@ class ExportB3D(bpy.types.Operator, ExportHelper):
         description="Turning this on will disable exporting object transform info",
         default=True,
     )
+    export_animations: BoolProperty(
+        name="Export animations",
+        default=True
+    )
     def execute(self, context):
-        return b3d_export(self.filepath,self.convert_coords,self.export_as_one)
+        return b3d_export(self.filepath,self.convert_coords,self.export_as_one,self.export_animations)
 
 class TEXSBlock():
     def __init__(self):
@@ -460,7 +464,7 @@ def CreateMesh(obj,boneNodes,vertexGroups,conv_coords):
         mesh.vertBlock.flags |= 2
     return mesh
 
-def CreateBone(bone,ind,skele,parentBone,conv_coords):
+def CreateBone(bone,ind,skele,parentBone,conv_coords,export_anims):
     retNode = NODEBlock()
     retNode.bone = []
     retNode.name = bone.name
@@ -505,7 +509,7 @@ def CreateBone(bone,ind,skele,parentBone,conv_coords):
     retNode.scaleY = tempScale.y
     retNode.scaleZ = tempScale.z
     for childBone in bone.children:
-        newBone,ind = CreateBone(childBone,ind,skele,retNode,conv_coords)
+        newBone,ind = CreateBone(childBone,ind,skele,retNode,conv_coords,export_anims)
         retNode.subNodes.append(newBone)
         newBone.parent = retNode
     
@@ -514,7 +518,8 @@ def CreateBone(bone,ind,skele,parentBone,conv_coords):
         if pb.bone != bone:
             continue
         retNode.poseBone = pb
-    retNode.keyNode = currKeys
+    if (export_anims==True):
+        retNode.keyNode = currKeys
     
     return retNode,ind
 
@@ -560,7 +565,7 @@ def CreateAnimation(parentMostNode, conv_coords):
         for child in parentMostNode.subNodes:
             GetAnimationMatrix(child, conv_coords)
 
-def CreateNode(obj,parent,conv_coords,armatureOverride):
+def CreateNode(obj,parent,conv_coords,armatureOverride,export_anims):
     retNode = NODEBlock()
     retNode.name = obj.name
     if obj.type == 'MESH':
@@ -571,9 +576,10 @@ def CreateNode(obj,parent,conv_coords,armatureOverride):
         if (armature == None):
             armature = armatureOverride
         if (armature != None):
-            CreateNode(armature,retNode,conv_coords,None)
-            CreateAnimation(retNode, conv_coords)
-            retNode.animNode = True
+            CreateNode(armature,retNode,conv_coords,None,export_anims)
+            if (export_anims == True):
+                CreateAnimation(retNode, conv_coords)
+                retNode.animNode = True
         newmesh = obj.to_mesh(preserve_all_data_layers=True,depsgraph=bpy.context.evaluated_depsgraph_get())#obj.data.copy()
         bm = bmesh.new()
         bm.from_mesh(obj.data)
@@ -602,7 +608,7 @@ def CreateNode(obj,parent,conv_coords,armatureOverride):
         boneInd = 0
         for bone in obj.data.bones:
             if bone.parent == None:
-                newBone,boneInd = CreateBone(bone,boneInd,obj,None,conv_coords)
+                newBone,boneInd = CreateBone(bone,boneInd,obj,None,conv_coords,export_anims)
                 parent.subNodes.append(newBone)
     
     """for ob in obj.children:
@@ -875,7 +881,7 @@ def WriteFile(texs,brus,node,filepath,conv_coords):
     
     f.close()
 
-def b3d_export(filepath,conv_coords,combine_all):
+def b3d_export(filepath,conv_coords,combine_all,export_anims):
     # need current object...
     curr_obj = bpy.context.active_object
     armatureOverride = None
@@ -924,7 +930,7 @@ def b3d_export(filepath,conv_coords,combine_all):
         armatureOverride.data.pose_position = 'POSE'
     texs = CreateTexs(curr_obj)
     brus = CreateBrus(curr_obj,texs)
-    node = CreateNode(curr_obj,None,conv_coords,armatureOverride)
+    node = CreateNode(curr_obj,None,conv_coords,armatureOverride,export_anims)
     
     WriteFile(texs,brus,node,filepath,conv_coords)
     
